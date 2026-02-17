@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project
+*.db
+jobs.db
+output/
+resume/resume.tex
+resume/resume.pdf
+resume/*.aux
+resume/*.fdb_latexmk
+resume/*.fls
+resume/*.log
+resume/*.out
+resume/*.pdf
+resume/*.synctex.gz
+
+# Credentials
+.env
+.env.local
+credentials.json
+
+# OS
+.DS_Store
+Thumbs.db

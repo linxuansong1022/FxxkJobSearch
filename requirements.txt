@@ -1,0 +1,15 @@
+# 采集层
+python-jobspy>=1.1.0        # LinkedIn/Indeed 聚合采集
+httpx>=0.27.0               # The Hub API 请求
+
+# 智能层 (Google Vertex AI)
+google-cloud-aiplatform>=1.40.0   # Gemini + Embeddings
+numpy>=1.26.0                     # 余弦相似度计算
+
+# 生成层
+jinja2>=3.1.0               # LaTeX 模板渲染
+pyyaml>=6.0                 # profile.yaml 解析
+
+# Tectonic 需要系统安装，不是 pip 包
+# macOS: brew install tectonic
+# Linux: cargo install tectonic
