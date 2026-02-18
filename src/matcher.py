@@ -147,13 +147,25 @@ def match_bullets_to_jd(
     """
     top_n = top_n or config.TOP_N_BULLETS
 
-    # 构造 JD 查询文本：将 hard_skills 和 company_domain 拼接
-    hard_skills = jd_analysis.get("hard_skills", [])
-    domain = jd_analysis.get("company_domain", "")
-    query_text = f"{domain}: {', '.join(hard_skills)}"
+    # 构造 JD 查询文本：兼容 Gemini 可能输出的多种字段名
+    hard_skills = (
+        jd_analysis.get("hard_skills")
+        or jd_analysis.get("required_skills")
+        or jd_analysis.get("skills")
+        or []
+    )
+    domain = (
+        jd_analysis.get("company_domain")
+        or jd_analysis.get("industry")
+        or jd_analysis.get("description_keywords", [""])[0]
+        or ""
+    )
+    # 如果 hard_skills 里的元素也可能是很长的描述，截取前几个词
+    skill_texts = [s if len(s) < 50 else s[:50] for s in hard_skills]
+    query_text = f"{domain}: {', '.join(skill_texts)}"
 
     if not query_text.strip(": "):
-        logger.warning("JD 分析中无 hard_skills，无法匹配")
+        logger.warning("JD 分析中无技能信息，无法匹配")
         return bullets[:top_n]  # 降级：返回前N条
 
     # 向量化

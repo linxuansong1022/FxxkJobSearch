@@ -1,13 +1,8 @@
 %-------------------------
 % Jinja2 动态简历模板
 %
-% 基于 resume.tex 改造，使用自定义 Jinja2 定界符：
-%   变量: \VAR{variable_name}
-%   块:   \BLOCK{for item in list} ... \BLOCK{endfor}
-%   条件: \BLOCK{if condition} ... \BLOCK{endif}
-%
-% builder.py 会将 profile.yaml 中的数据 + 向量匹配结果注入此模板，
-% 然后用 Tectonic 编译为 PDF。
+% Jinja2 delimiters: VAR, BLOCK, comment (see builder.py)
+% builder.py 注入数据后由 Tectonic 编译为 PDF。
 %------------------------
 
 \documentclass[letterpaper,11pt]{article}
@@ -27,8 +22,6 @@
 \usepackage{multicol}
 \setlength{\multicolsep}{-3.0pt}
 \setlength{\columnsep}{-1pt}
-\input{glyphtounicode}
-
 \usepackage[margin=1in,top=0.8in]{geometry}
 
 \pagestyle{fancy}
@@ -53,8 +46,6 @@
   \vspace{-4pt}\scshape\raggedright\large\bfseries
 }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
 
-\pdfgentounicode=1
-
 %-------------------------
 % Custom commands
 \newcommand{\resumeItem}[1]{
@@ -71,13 +62,6 @@
     \end{tabular*}\vspace{-7pt}
 }
 
-\newcommand{\resumeProjectHeading}[2]{
-    \item
-    \begin{tabular*}{1.001\textwidth}{l@{\extracolsep{\fill}}r}
-      \small#1 & \textbf{\small #2}\\
-    \end{tabular*}\vspace{-7pt}
-}
-
 \newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
 
 \renewcommand\labelitemi{$\vcenter{\hbox{\tiny$\bullet$}}$}
@@ -88,9 +72,7 @@
 \newcommand{\resumeItemListStart}{\begin{itemize}}
 \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
 
-
-%-------------------------------------------
-%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%--- RESUME STARTS HERE ---
 
 \begin{document}
 
@@ -124,37 +106,30 @@
   \resumeSubHeadingListEnd
 
 %-----------EXPERIENCE-----------
-%# 经历部分：使用向量匹配后的 bullet points
-%# matched_exp_bullets 由 builder.py 注入，包含与目标JD最相关的经历
 \section{Experiences}
   \resumeSubHeadingListStart
-\BLOCK{for exp in experiences}
+\BLOCK{for exp in render_experiences}
     \resumeSubheading
     {\VAR{exp.company}}{\VAR{exp.dates}}
     {\VAR{exp.role}}{\VAR{exp.location}}
     \resumeItemListStart
-\BLOCK{for bullet in matched_exp_bullets}
-\BLOCK{if bullet.source == exp.company}
-    \resumeItem{\VAR{bullet.display_text}}
-\BLOCK{endif}
+\BLOCK{for bullet in exp.bullets}
+    \resumeItem{\VAR{bullet}}
 \BLOCK{endfor}
     \resumeItemListEnd
 \BLOCK{endfor}
 \resumeSubHeadingListEnd
 
 %-----------PROJECTS-----------
-%# 项目部分：同样使用向量匹配后的 bullet points
 \section{Projects}
   \resumeSubHeadingListStart
-\BLOCK{for proj in projects}
+\BLOCK{for proj in render_projects}
     \resumeSubheading
       {\VAR{proj.name}}{\VAR{proj.dates}}
-      {\VAR{proj.role}}{\VAR{proj.get('type', '')}}
+      {\VAR{proj.role}}{\VAR{proj.type}}
       \resumeItemListStart
-\BLOCK{for bullet in matched_proj_bullets}
-\BLOCK{if bullet.source == proj.name}
-        \resumeItem{\VAR{bullet.display_text}}
-\BLOCK{endif}
+\BLOCK{for bullet in proj.bullets}
+        \resumeItem{\VAR{bullet}}
 \BLOCK{endfor}
       \resumeItemListEnd
 \BLOCK{endfor}

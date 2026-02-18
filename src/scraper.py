@@ -5,10 +5,7 @@
 1. LinkedIn + Indeed — 通过 python-jobspy 库聚合采集
 2. The Hub (thehub.io) — 通过 httpx 直调 REST API
 
-采集策略：
-- 少量多次（每次20条），浅层搜索代替深层翻页
-- 仅采集过去24小时内发布的职位
-- 采集后立即计算 content_hash 去重，写入 SQLite
+采集后写入 SQLite，由 filter.py 做相关性过滤。
 """
 
 import logging
@@ -33,21 +30,13 @@ logger = logging.getLogger(__name__)
 def scrape_jobspy(db: JobDatabase) -> int:
     """
     使用 JobSpy 从 LinkedIn 和 Indeed 采集职位。
-
-    遍历 config.SEARCH_QUERIES 中的关键词，
-    每个关键词采集 results_wanted 条结果。
-    关键词之间随机延迟 2-5 秒，避免触发频率限制。
-
-    Returns:
-        新插入的职位数量
+    关键词之间随机延迟 2-5 秒。
     """
     new_count = 0
 
     for query in config.SEARCH_QUERIES:
         logger.info(f"JobSpy 采集: query='{query}'")
         try:
-            # TODO: 如果需要代理，在此添加 proxy 参数
-            # proxy="http://user:pass@host:port"
             jobs_df: pd.DataFrame = scrape_jobs(
                 site_name=["linkedin", "indeed"],
                 search_term=query,
@@ -60,12 +49,17 @@ def scrape_jobspy(db: JobDatabase) -> int:
             logger.warning(f"JobSpy 采集失败 (query='{query}'): {e}")
             continue
 
-        # 将 DataFrame 逐行写入数据库
         for _, row in jobs_df.iterrows():
             title = str(row.get("title", ""))
             company = str(row.get("company_name", "") or row.get("company", ""))
             if not title or not company:
                 continue
+
+            # 提取发布时间
+            posted_at = None
+            date_posted = row.get("date_posted")
+            if pd.notna(date_posted):
+                posted_at = str(date_posted)
 
             job_data = {
                 "platform": str(row.get("site", "unknown")),
@@ -75,14 +69,13 @@ def scrape_jobspy(db: JobDatabase) -> int:
                 "url": str(row.get("job_url", "")),
                 "content_hash": compute_job_hash(company, title),
                 "jd_text": clean_html(str(row.get("description", ""))),
+                "posted_at": posted_at,
             }
 
             if db.insert_job(job_data):
                 new_count += 1
 
-        # 关键词之间随机延迟
         delay = random.uniform(2, 5)
-        logger.debug(f"等待 {delay:.1f}s 后继续...")
         time.sleep(delay)
 
     return new_count
@@ -94,12 +87,8 @@ def scrape_jobspy(db: JobDatabase) -> int:
 
 def scrape_thehub(db: JobDatabase) -> int:
     """
-    通过 The Hub REST API 采集丹麦地区的实习/学生职位。
-
-    The Hub 返回标准 JSON，无反爬限制，是最稳定的数据源。
-
-    Returns:
-        新插入的职位数量
+    通过 The Hub REST API 采集丹麦地区的职位。
+    The Hub 返回标准 JSON，包含 publishedAt 发布时间。
     """
     new_count = 0
     hub_config = config.THEHUB_CONFIG
@@ -126,32 +115,129 @@ def scrape_thehub(db: JobDatabase) -> int:
             logger.warning(f"The Hub 采集失败 (keyword='{keyword}'): {e}")
             continue
 
-        # TODO: 根据 The Hub 实际返回的 JSON 结构调整字段名
-        # 常见结构: data["docs"] 或 data["results"] 或直接是列表
-        jobs_list = data if isinstance(data, list) else data.get("docs", data.get("results", []))
+        jobs_list = data.get("docs", data.get("results", data if isinstance(data, list) else []))
 
         for job in jobs_list:
             title = job.get("title", "")
-            company = job.get("company", {}).get("name", "") if isinstance(job.get("company"), dict) else str(job.get("company", ""))
+            company_obj = job.get("company", {})
+            company = company_obj.get("name", "") if isinstance(company_obj, dict) else str(company_obj)
+
             if not title or not company:
                 continue
 
+            # The Hub 的发布时间字段
+            posted_at = job.get("publishedAt") or job.get("approvedAt") or job.get("createdAt")
+
             job_data = {
                 "platform": "thehub",
-                "platform_id": str(job.get("id", job.get("_id", ""))),
+                "platform_id": str(job.get("id", "")),
                 "title": title,
                 "company": company,
-                "url": job.get("url", job.get("applyUrl", "")),
+                "url": job.get("absoluteJobUrl", ""),
                 "content_hash": compute_job_hash(company, title),
                 "jd_text": clean_html(str(job.get("description", ""))),
+                "posted_at": posted_at,
             }
 
             if db.insert_job(job_data):
                 new_count += 1
 
-        time.sleep(1)  # The Hub 友好，短延迟即可
+        time.sleep(1)
 
     return new_count
+
+
+# ============================================================
+# 3. LinkedIn JD 补全
+# ============================================================
+
+def backfill_linkedin_jd(db: JobDatabase) -> int:
+    """
+    对 JD 过短的 LinkedIn 职位，通过访问职位页面补全 JD。
+
+    JobSpy 的 LinkedIn 模式经常只返回标题，不含完整 JD。
+    这里用 httpx 访问 LinkedIn 公开职位页，提取 JD 文本。
+    """
+    # 找出 JD 过短的职位（< 100 字符）
+    cursor = db.conn.execute(
+        """SELECT id, url, title FROM jobs
+           WHERE platform = 'linkedin'
+             AND (jd_text IS NULL OR length(jd_text) < 100)
+             AND status != 'filtered'"""
+    )
+    short_jd_jobs = [dict(row) for row in cursor.fetchall()]
+
+    if not short_jd_jobs:
+        logger.info("没有需要补全 JD 的 LinkedIn 职位")
+        return 0
+
+    logger.info(f"需要补全 JD 的 LinkedIn 职位: {len(short_jd_jobs)} 条")
+    filled_count = 0
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    for job in short_jd_jobs:
+        url = job.get("url", "")
+        if not url or "linkedin.com" not in url:
+            continue
+
+        logger.info(f"  补全: {job['title']} ({url[:60]}...)")
+        try:
+            resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
+            if resp.status_code != 200:
+                logger.debug(f"    HTTP {resp.status_code}")
+                continue
+
+            html = resp.text
+            # LinkedIn 公开页面的 JD 通常在 <div class="show-more-less-html__markup"> 中
+            # 或者在 <div class="description__text"> 中
+            jd_text = _extract_linkedin_jd(html)
+
+            if jd_text and len(jd_text) > 100:
+                db.update_job_jd(job["id"], jd_text)
+                filled_count += 1
+                logger.info(f"    补全成功: {len(jd_text)} 字")
+            else:
+                logger.debug(f"    未提取到有效 JD")
+
+        except Exception as e:
+            logger.debug(f"    请求失败: {e}")
+
+        # 友好延迟，避免被封
+        time.sleep(random.uniform(2, 4))
+
+    return filled_count
+
+
+def _extract_linkedin_jd(html: str) -> str:
+    """从 LinkedIn 职位页面 HTML 中提取 JD 文本"""
+    from src.utils import clean_html
+    import re
+
+    # 方法1：找 show-more-less-html__markup 块
+    pattern1 = r'<div class="show-more-less-html__markup[^"]*"[^>]*>(.*?)</div>'
+    match = re.search(pattern1, html, re.DOTALL)
+    if match:
+        return clean_html(match.group(1))
+
+    # 方法2：找 description__text 块
+    pattern2 = r'<div class="description__text[^"]*"[^>]*>(.*?)</div>'
+    match = re.search(pattern2, html, re.DOTALL)
+    if match:
+        return clean_html(match.group(1))
+
+    # 方法3：找 JSON-LD 中的 description
+    pattern3 = r'"description"\s*:\s*"((?:[^"\\]|\\.)*)"'
+    match = re.search(pattern3, html)
+    if match:
+        desc = match.group(1).encode().decode('unicode_escape', errors='ignore')
+        return clean_html(desc)
+
+    return ""
 
 
 # ============================================================

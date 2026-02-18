@@ -8,6 +8,10 @@
 import os
 from pathlib import Path
 
+# 读取本地 .env 文件
+from dotenv import load_dotenv
+load_dotenv()
+
 # ============================================================
 # 路径配置
 # ============================================================
@@ -21,9 +25,17 @@ DB_PATH = BASE_DIR / "jobs.db"
 # ============================================================
 # Google Cloud / Vertex AI 配置
 # ============================================================
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
+# 使用新的 google-genai 库所需的配置
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "cph-beer-map-dev")
 GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
-GEMINI_MODEL = "gemini-2.0-flash"  # 或 gemini-1.5-pro
+GOOGLE_CLOUD_API_KEY = os.getenv("GOOGLE_CLOUD_API_KEY", "")
+
+# 主分析模型
+GEMINI_MODEL = "gemini-3-pro-preview" 
+
+# 快速过滤模型 (暂且也用 gemini-3-flash-preview 如果存在，或者保持 1.5-flash)
+GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp" # 或 gemini-1.5-flash
+
 EMBEDDING_MODEL = "text-embedding-004"
 EMBEDDING_DIMENSION = 768
 
@@ -46,7 +58,7 @@ JOBSPY_CONFIG = {
     "location": "Denmark",
     "results_wanted": 20,       # 每次少量采集
     "hours_old": 24,            # 仅过去24小时
-    "country_indeed": "dk",
+    "country_indeed": "denmark",
 }
 
 # The Hub API 配置
@@ -62,6 +74,42 @@ THEHUB_CONFIG = {
 }
 
 # ============================================================
+# 过滤配置
+# ============================================================
+
+# 标题中包含这些词的直接排除（不区分大小写）
+TITLE_EXCLUDE_KEYWORDS = [
+    "senior", "staff", "lead", "principal", "head of",
+    "manager", "director", "vp ", "vice president",
+    "hr ", "human resource", "marketing", "sales",
+    "finance", "accounting", "legal", "counsel",
+    "customer service", "customer success",
+    "ux design", "ui design", "graphic design",
+    "content", "social media", "influencer",
+    "phd", "postdoc",
+]
+
+# 标题中包含这些词的优先保留（不区分大小写）
+TITLE_INCLUDE_KEYWORDS = [
+    "intern", "internship", "student", "junior",
+    "graduate", "entry", "trainee", "apprentice",
+    "studiejob", "praktik",  # 丹麦语：学生工、实习
+]
+
+# 领域相关关键词 — 标题或JD中应包含至少一个
+DOMAIN_KEYWORDS = [
+    "python", "ai", "artificial intelligence",
+    "machine learning", "ml", "deep learning",
+    "data scien", "data engineer", "data analyst",
+    "llm", "nlp", "rag", "agent",
+    "backend", "back-end", "software engineer",
+    "software developer", "full-stack", "fullstack",
+]
+
+# 职位最大年龄（天），超过则过滤
+MAX_JOB_AGE_DAYS = 7
+
+# ============================================================
 # 简历生成配置
 # ============================================================
 # 向量匹配时选取的 Top-N 条经历 bullet points
@@ -69,6 +117,12 @@ TOP_N_BULLETS = 6
 
 # Tectonic 编译命令
 TECTONIC_CMD = "tectonic"
+
+# ============================================================
+# Telegram 通知配置
+# ============================================================
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # ============================================================
 # 日志配置

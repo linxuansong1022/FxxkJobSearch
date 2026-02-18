@@ -26,11 +26,20 @@ resume/*.log
 resume/*.out
 resume/*.pdf
 resume/*.synctex.gz
+*.log
+
+# Personal & Logs
+profile.yaml
+claude.md
+converted.md
+.claude/
+.gemini/
 
 # Credentials
 .env
 .env.local
 credentials.json
+!.env.example
 
 # OS
 .DS_Store

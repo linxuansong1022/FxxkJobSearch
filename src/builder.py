@@ -1,5 +1,5 @@
 """
-简历生成模块 (Jinja2 + Tectonic)
+简历生成模块 (Jinja2 + Tectonic + google-genai)
 
 职责：
 1. 从数据库读取 status='analyzed' 的职位
@@ -7,12 +7,6 @@
 3. （可选）调用 LLM 对 bullet points 做微调重写
 4. 用 Jinja2 渲染 LaTeX 模板
 5. 用 Tectonic 编译为 PDF
-6. 输出到 output/ 目录
-
-关键设计：
-- Jinja2 使用自定义定界符，避免与 LaTeX {} 冲突
-- 所有动态文本经过 escape_latex() 转义
-- 编译失败时记录日志，不中断主流程
 """
 
 import json
@@ -20,11 +14,12 @@ import logging
 import subprocess
 import tempfile
 import shutil
+import os
 from pathlib import Path
 
 import jinja2
-import vertexai
-from vertexai.generative_models import GenerativeModel, GenerationConfig
+from google import genai
+from google.genai import types
 
 import config
 from src.database import JobDatabase
@@ -35,18 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# Jinja2 LaTeX 环境（自定义定界符）
+# Jinja2 LaTeX 环境
 # ============================================================
 
 def _create_latex_env() -> jinja2.Environment:
-    """
-    创建 Jinja2 环境，使用自定义定界符避免与 LaTeX 冲突。
-
-    LaTeX 用 {}，所以 Jinja2 改用：
-    - 变量: \\VAR{...}
-    - 块:   \\BLOCK{...}
-    - 注释: \\#{...}
-    """
     return jinja2.Environment(
         block_start_string="\\BLOCK{",
         block_end_string="}",
@@ -57,7 +44,7 @@ def _create_latex_env() -> jinja2.Environment:
         line_statement_prefix="%%",
         line_comment_prefix="%#",
         trim_blocks=True,
-        autoescape=False,  # LaTeX 不需要 HTML 转义
+        autoescape=False,
         loader=jinja2.FileSystemLoader(str(config.RESUME_DIR)),
     )
 
@@ -82,23 +69,21 @@ _REWRITE_PROMPT = """你是一个专业的简历写作专家。请根据目标�
 只输出修改后的bullet point，不要任何其他解释文字。"""
 
 
-def rewrite_bullet(model: GenerativeModel, original: str, skills: list[str]) -> str:
+def rewrite_bullet(client: genai.Client, original: str, skills: list[str]) -> str:
     """
-    用 Gemini 微调单条 bullet point 使其更匹配目标 JD。
-
-    如果 API 调用失败，返回原文（降级策略）。
+    用 Gemini 微调单条 bullet point。
     """
     prompt = _REWRITE_PROMPT.format(
         skills=", ".join(skills),
         original=original,
     )
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=GenerationConfig(temperature=0.3),
+        response = client.models.generate_content(
+            model=config.GEMINI_MODEL,
+            contents=[prompt],
+            config=types.GenerateContentConfig(temperature=0.3),
         )
         rewritten = response.text.strip().strip('"').strip("'")
-        # 简单校验：重写结果不能太短或太长
         if 20 < len(rewritten) < len(original) * 3:
             return rewritten
         return original
@@ -112,21 +97,6 @@ def rewrite_bullet(model: GenerativeModel, original: str, skills: list[str]) -> 
 # ============================================================
 
 def compile_latex(tex_content: str, output_path: Path) -> bool:
-    """
-    用 Tectonic 将 LaTeX 源码编译为 PDF。
-
-    流程：
-    1. 在临时目录创建 .tex 文件
-    2. 调用 tectonic 编译
-    3. 将生成的 PDF 移动到目标路径
-
-    Args:
-        tex_content: 渲染后的完整 LaTeX 源码
-        output_path: PDF 输出路径
-
-    Returns:
-        True 编译成功, False 失败
-    """
     with tempfile.TemporaryDirectory() as tmpdir:
         tex_path = Path(tmpdir) / "resume.tex"
         tex_path.write_text(tex_content, encoding="utf-8")
@@ -144,7 +114,6 @@ def compile_latex(tex_content: str, output_path: Path) -> bool:
                 logger.error(f"Tectonic 编译失败:\n{result.stderr}")
                 return False
 
-            # 编译成功，移动 PDF 到目标路径
             pdf_path = tex_path.with_suffix(".pdf")
             if pdf_path.exists():
                 shutil.move(str(pdf_path), str(output_path))
@@ -158,10 +127,7 @@ def compile_latex(tex_content: str, output_path: Path) -> bool:
             logger.error("Tectonic 编译超时 (60s)")
             return False
         except FileNotFoundError:
-            logger.error(
-                "Tectonic 未安装。请安装: brew install tectonic (macOS) "
-                "或 cargo install tectonic"
-            )
+            logger.error("Tectonic 未安装。请安装: brew install tectonic")
             return False
 
 
@@ -174,32 +140,29 @@ def generate_single_resume(
     profile: dict,
     bullets: list[dict],
     latex_env: jinja2.Environment,
-    llm_model: GenerativeModel | None = None,
+    client: genai.Client | None = None,
 ) -> str | None:
-    """
-    为单个职位生成定制简历 PDF。
+    raw_analysis = json.loads(job.get("analysis", "{}"))
+    if isinstance(raw_analysis, list) and raw_analysis:
+        analysis = raw_analysis[0] if isinstance(raw_analysis[0], dict) else {}
+    elif isinstance(raw_analysis, dict):
+        analysis = raw_analysis
+    else:
+        analysis = {}
+        
+    hard_skills = (
+        analysis.get("hard_skills")
+        or analysis.get("required_skills")
+        or analysis.get("skills")
+        or []
+    )
 
-    Args:
-        job: 数据库中的 job 记录
-        profile: profile.yaml 的完整数据
-        bullets: load_profile_bullets() 的返回值
-        latex_env: Jinja2 环境
-        llm_model: Gemini 模型（用于重写，可为 None 跳过重写）
-
-    Returns:
-        生成的 PDF 路径字符串，失败返回 None
-    """
-    analysis = json.loads(job.get("analysis", "{}"))
-    hard_skills = analysis.get("hard_skills", [])
-
-    # 步骤1：向量匹配，选出最相关的经历
     matched = match_bullets_to_jd(bullets, analysis)
 
-    # 步骤2：（可选）LLM 重写 bullet points
     final_bullets = []
     for b in matched:
-        if llm_model and hard_skills:
-            rewritten = rewrite_bullet(llm_model, b["text"], hard_skills)
+        if client and hard_skills:
+            rewritten = rewrite_bullet(client, b["text"], hard_skills)
         else:
             rewritten = b["text"]
         final_bullets.append({
@@ -207,21 +170,42 @@ def generate_single_resume(
             "display_text": escape_latex(rewritten),
         })
 
-    # 步骤3：按来源分组（experience vs project）
-    exp_bullets = [b for b in final_bullets if b["category"] == "experience"]
-    proj_bullets = [b for b in final_bullets if b["category"] == "project"]
+    render_experiences = []
+    for exp in profile.get("experiences", []):
+        matched = [b["display_text"] for b in final_bullets
+                   if b["source"] == exp.get("company") and b["category"] == "experience"]
+        if not matched:
+            matched = [escape_latex(b) for b in exp.get("bullets", [])]
+        render_experiences.append({
+            "company": escape_latex(exp.get("company", "")),
+            "role": escape_latex(exp.get("role", "")),
+            "dates": exp.get("dates", ""),
+            "location": escape_latex(exp.get("location", "")),
+            "bullets": matched,
+        })
 
-    # 步骤4：渲染 Jinja2 模板
+    render_projects = []
+    for proj in profile.get("projects", []):
+        matched = [b["display_text"] for b in final_bullets
+                   if b["source"] == proj.get("name") and b["category"] == "project"]
+        if not matched:
+            matched = [escape_latex(b) for b in proj.get("bullets", [])]
+        render_projects.append({
+            "name": escape_latex(proj.get("name", "")),
+            "role": escape_latex(proj.get("role", "")),
+            "type": escape_latex(proj.get("type", "")),
+            "dates": proj.get("dates", ""),
+            "bullets": matched,
+        })
+
     try:
         template = latex_env.get_template("template.tex")
         tex_content = template.render(
             personal=profile["personal"],
             education=profile["education"],
-            experiences=profile.get("experiences", []),
-            projects=profile.get("projects", []),
             skills=profile.get("skills", {}),
-            matched_exp_bullets=exp_bullets,
-            matched_proj_bullets=proj_bullets,
+            render_experiences=render_experiences,
+            render_projects=render_projects,
             target_job=job,
             target_analysis=analysis,
         )
@@ -229,7 +213,6 @@ def generate_single_resume(
         logger.error(f"Jinja2 渲染失败: {e}")
         return None
 
-    # 步骤5：编译 PDF
     safe_name = f"{job['id']}_{job['company'][:20]}_{job['title'][:30]}".replace(" ", "_").replace("/", "-")
     output_path = config.OUTPUT_DIR / f"{safe_name}.pdf"
 
@@ -239,12 +222,6 @@ def generate_single_resume(
 
 
 def generate_resumes(db: JobDatabase) -> int:
-    """
-    批量为所有 status='analyzed' 的职位生成定制简历。
-
-    Returns:
-        成功生成的简历数量
-    """
     analyzed_jobs = db.get_jobs_by_status("analyzed")
     if not analyzed_jobs:
         logger.info("没有待生成简历的职位")
@@ -252,23 +229,26 @@ def generate_resumes(db: JobDatabase) -> int:
 
     logger.info(f"待生成简历: {len(analyzed_jobs)} 条")
 
-    # 加载共享资源（只加载一次）
     profile = load_profile()
     bullets = load_profile_bullets()
     latex_env = _create_latex_env()
 
-    # 初始化 Gemini 用于重写（可选，设为 None 则跳过重写步骤）
     try:
-        vertexai.init(project=config.GCP_PROJECT_ID, location=config.GCP_LOCATION)
-        llm_model = GenerativeModel(config.GEMINI_MODEL)
+        api_key = config.GOOGLE_CLOUD_API_KEY or os.environ.get("GOOGLE_CLOUD_API_KEY")
+        client = genai.Client(
+            vertexai=True,
+            api_key=api_key,
+            project=config.GCP_PROJECT_ID,
+            location=config.GCP_LOCATION
+        )
     except Exception:
-        logger.warning("Gemini 初始化失败，将跳过 bullet 重写步骤")
-        llm_model = None
+        logger.warning("Gemini Client 初始化失败，将跳过 bullet 重写步骤")
+        client = None
 
     generated_count = 0
     for job in analyzed_jobs:
         logger.info(f"生成简历: {job['title']} @ {job['company']}")
-        pdf_path = generate_single_resume(job, profile, bullets, latex_env, llm_model)
+        pdf_path = generate_single_resume(job, profile, bullets, latex_env, client)
 
         if pdf_path:
             db.update_job_resume(job["id"], pdf_path)
