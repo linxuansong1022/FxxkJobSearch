@@ -1,27 +1,28 @@
 """
-LinkedIn Agent — CLI 入口
+FxxkJobSearch — CLI 入口
 
 用法:
-    python main.py scrape      # 采集职位
-    python main.py filter      # 过滤不相关职位
-    python main.py backfill    # 补全 LinkedIn 缺失的 JD
-    python main.py analyze     # 用 Gemini 分析 JD
-    python main.py generate    # 生成定制简历 PDF
-    python main.py run         # 完整流水线：采集 → 过滤 → 补全 → 分析
+    python main.py scrape      # [仅测试] 采集职位
+    python main.py filter      # [仅测试] 过滤不相关职位
+    python main.py analyze     # [仅测试] 用 Gemini 分析 JD
     python main.py status      # 查看数据库统计
     python main.py list        # 列出所有相关职位
+    python main.py agent       # 🤖 运行 Multi-Agent 系统 (v2.0 主干)
+    python main.py mcp-server  # 启动 MCP Tool Server
+    python main.py evaluate    # 运行 Agent 评估
 """
 
 import argparse
 import logging
 import sys
+import asyncio
 
 import config
 from src.database import JobDatabase
-from src.scraper import scrape_all_platforms, backfill_linkedin_jd
+from src.scraper import scrape_all_platforms
 from src.filter import filter_jobs
 from src.analyzer import analyze_pending_jobs
-from src.notifier import send_daily_report  # 新增通知模块
+from src.notifier import send_daily_report
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
@@ -38,10 +39,10 @@ def cmd_scrape(db: JobDatabase):
     logger.info(f"采集完成，新增 {new_count} 条职位")
 
 
-def cmd_filter(db: JobDatabase):
-    """过滤不相关职位"""
+async def cmd_filter(db: JobDatabase):
+    """过滤不相关职位 (Async)"""
     logger.info("开始过滤...")
-    counts = filter_jobs(db)
+    counts = await filter_jobs(db)
     logger.info(
         f"过滤完成: {counts['relevant']} 条相关, "
         f"{counts['irrelevant']} 条不相关, "
@@ -49,17 +50,11 @@ def cmd_filter(db: JobDatabase):
     )
 
 
-def cmd_backfill(db: JobDatabase):
-    """补全 LinkedIn 缺失的 JD"""
-    logger.info("开始补全 LinkedIn JD...")
-    count = backfill_linkedin_jd(db)
-    logger.info(f"补全完成: {count} 条")
 
-
-def cmd_analyze(db: JobDatabase):
-    """分析 JD（仅处理 relevant 且 status='new' 的职位）"""
+async def cmd_analyze(db: JobDatabase):
+    """分析 JD (Async)"""
     logger.info("开始分析 JD...")
-    analyzed_count = analyze_pending_jobs(db)
+    analyzed_count = await analyze_pending_jobs(db)
     logger.info(f"分析完成，处理了 {analyzed_count} 条职位")
     
     # 只有当确实有新分析的职位，或者你想每次都强制发通知时调用
@@ -75,13 +70,6 @@ def cmd_analyze(db: JobDatabase):
         # logger.info("没有新分析的职位，跳过通知")
         pass
 
-
-def cmd_run(db: JobDatabase):
-    """完整流水线"""
-    cmd_scrape(db)
-    cmd_filter(db)
-    cmd_backfill(db)
-    logger.info("采集流水线完成")
 
 
 def cmd_status(db: JobDatabase):
@@ -123,13 +111,41 @@ def cmd_report(db: JobDatabase):
     except Exception as e:
         logger.error(f"发送通知失败: {e}")
 
+async def cmd_agent(db: JobDatabase):
+    """运行 Multi-Agent 系统 (v2.0 Async)"""
+    from agent import run_orchestrator
+    from src.memory import MemorySystem
+    memory = MemorySystem(config.DB_PATH)
+    try:
+        await run_orchestrator(db, memory)
+    finally:
+        memory.consolidate()
+        memory.close()
+
+
+def cmd_mcp_server(db: JobDatabase):
+    """启动 MCP Tool Server (stdio 模式)"""
+    from src.mcp.mcp_server import run_mcp_stdio_server
+    run_mcp_stdio_server(db)
+
+
+def cmd_evaluate(db: JobDatabase):
+    """运行 Agent 评估系统"""
+    from src.evaluation.evaluator import run_evaluation
+    run_evaluation()
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="LinkedIn Agent — 个人求职自动化工具"
+        description="FxxkJobSearch — 求职自动化 Multi-Agent 系统"
     )
     parser.add_argument(
         "command",
-        choices=["scrape", "filter", "backfill", "analyze", "generate", "run", "status", "list", "report"],
+        choices=[
+            "scrape", "filter", "analyze",
+            "status", "list", "report",
+            "agent", "mcp-server", "evaluate",
+        ],
         help="要执行的命令",
     )
     args = parser.parse_args()
@@ -140,14 +156,19 @@ def main():
     commands = {
         "scrape": cmd_scrape,
         "filter": cmd_filter,
-        "backfill": cmd_backfill,
         "analyze": cmd_analyze,
-        "run": cmd_run,
         "status": cmd_status,
         "list": cmd_list,
         "report": cmd_report,
+        "agent": cmd_agent,
+        "mcp-server": cmd_mcp_server,
+        "evaluate": cmd_evaluate,
     }
-    commands[args.command](db)
+    cmd_fn = commands[args.command]
+    if asyncio.iscoroutinefunction(cmd_fn):
+        asyncio.run(cmd_fn(db))
+    else:
+        cmd_fn(db)
 
 
 if __name__ == "__main__":

@@ -77,8 +77,6 @@ def _init_client():
         return genai.Client(
             vertexai=True,
             api_key=api_key,
-            project=config.GCP_PROJECT_ID,
-            location=config.GCP_LOCATION
         )
     else:
         logger.info(f"Using ADC for GenAI Filter Client")
@@ -89,17 +87,22 @@ def _init_client():
         )
 
 
-def _check_relevance_with_llm(client: genai.Client, title: str, company: str) -> tuple[bool, str]:
+import asyncio
+
+async def _check_relevance_with_llm(client: genai.Client, title: str, company: str, semaphore: asyncio.Semaphore) -> tuple[bool, str]:
     """
-    使用 Gemini Flash 判断职位是否相关。
+    使用 Gemini Flash 判断职位是否相关 (Async)。
     """
     prompt = f"""
     Role: You are a strict recruitment filter for a Computer Science Master student.
     
     Candidate Profile:
-    - Education: Master in CS at DTU.
-    - Skills: Python, Backend, AI, LLM, RAG, Agents, Data Engineering.
-    - Looking for: Internship, Student Job, Unpaid Project.
+    - Skills: High proficiency in Python (PyTorch), AI, GraphRAG. Competent in Java, C/C++.
+    - Strategy: Aggressive Capture. Any Backend, Full-stack, AI, or Data Engineering role (Intern/Student/Junior) is considered RELEVANT.
+    - Transferable Skills: Candidate can migrate from Python to any other language (e.g. C#, Go, Node) quickly by building related "vibe coding" projects. Treat tech stacks as flexible.
+    - Reject ONLY if:
+      - Role is not technical (e.g., Pure Sales, HR, Marketing).
+      - Role is clearly too senior (e.g., 8+ years experience, Lead/Manager).
     
     Negative Filters (Must Reject):
     - Pure Marketing, Sales, HR, Finance, Supply Chain, Design roles.
@@ -122,72 +125,78 @@ def _check_relevance_with_llm(client: genai.Client, title: str, company: str) ->
         response_mime_type="application/json",
     )
 
-    try:
-        response = client.models.generate_content(
-            model=config.GEMINI_FLASH_MODEL,
-            contents=[prompt],
-            config=generation_config,
-        )
-        
-        result = json.loads(response.text)
-        return result.get("is_relevant", False), result.get("reason", "No reason provided")
-    except Exception as e:
-        logger.warning(f"LLM Filter Error: {e}")
-        # 如果 LLM 失败，回退到保守策略
-        if "intern" in title.lower() or "student" in title.lower():
-            return True, "LLM failed, fallback to keyword"
-        return False, "LLM failed"
+    async with semaphore:
+        try:
+            # 使用 .aio.models.generate_content 进行异步调用
+            response = await client.aio.models.generate_content(
+                model=config.GEMINI_FLASH_MODEL,
+                contents=[prompt],
+                config=generation_config,
+            )
+            
+            result = json.loads(response.text)
+            return result.get("is_relevant", False), result.get("reason", "No reason provided")
+        except Exception as e:
+            logger.warning(f"LLM Filter Error: {e}")
+            if "intern" in title.lower() or "student" in title.lower():
+                return True, "LLM failed, fallback to keyword"
+            return False, "LLM failed"
 
 
-def filter_jobs(db: JobDatabase) -> dict[str, int]:
+async def process_job(db: JobDatabase, job: dict, client: genai.Client, semaphore: asyncio.Semaphore) -> str:
+    """处理单个职位的过滤逻辑 (Async)"""
+    title = job["title"]
+    
+    # 1. 时间过滤 (Rule)
+    if _is_too_old(job.get("posted_at")):
+        db.update_job_relevance(job["id"], "irrelevant", status="filtered")
+        logger.debug(f"  [Time] 过期: {title}")
+        return "too_old"
+
+    # 2. 显性排除 (Rule)
+    if _is_obvious_irrelevant(title):
+        db.update_job_relevance(job["id"], "irrelevant", status="filtered")
+        logger.info(f"  [Rule] 排除: {title}")
+        return "irrelevant"
+
+    # 3. 智能判断 (LLM)
+    is_relevant, reason = await _check_relevance_with_llm(client, title, job["company"], semaphore)
+    
+    if is_relevant:
+        db.update_job_relevance(job["id"], "relevant")
+        logger.info(f"  [LLM] 保留: {title} ({reason})")
+        return "relevant"
+    else:
+        db.update_job_relevance(job["id"], "irrelevant", status="filtered")
+        logger.info(f"  [LLM] 排除: {title} ({reason})")
+        return "irrelevant"
+
+
+async def filter_jobs(db: JobDatabase) -> dict[str, int]:
     """
-    执行过滤流程。
+    执行过滤流程 (Async 并发)。
     """
     unscored = db.get_unscored_jobs()
     if not unscored:
         logger.info("没有待过滤的职位")
         return {"relevant": 0, "irrelevant": 0, "too_old": 0}
 
-    logger.info(f"待过滤职位: {len(unscored)} 条")
+    logger.info(f"待过滤职位: {len(unscored)} 条 (并发模式)")
     
-    # 初始化 client (ADC)
     try:
         client = _init_client()
     except Exception as e:
         logger.error(f"Filter client init failed: {e}")
         return {"relevant": 0, "irrelevant": 0, "too_old": 0}
 
+    # 限制并发数，防止超过 API Rate Limit
+    semaphore = asyncio.Semaphore(10)
+    
+    tasks = [process_job(db, job, client, semaphore) for job in unscored]
+    results = await asyncio.gather(*tasks)
+
     counts = {"relevant": 0, "irrelevant": 0, "too_old": 0}
-
-    for job in unscored:
-        title = job["title"]
-        
-        # 1. 时间过滤 (Rule)
-        if _is_too_old(job.get("posted_at")):
-            db.update_job_relevance(job["id"], "irrelevant", status="filtered")
-            counts["too_old"] += 1
-            logger.debug(f"  [Time] 过期: {title}")
-            continue
-
-        # 2. 显性排除 (Rule)
-        if _is_obvious_irrelevant(title):
-            db.update_job_relevance(job["id"], "irrelevant", status="filtered")
-            counts["irrelevant"] += 1
-            logger.info(f"  [Rule] 排除: {title}")
-            continue
-
-        # 3. 智能判断 (LLM)
-        time.sleep(0.2) 
-        
-        is_relevant, reason = _check_relevance_with_llm(client, title, job["company"])
-        
-        if is_relevant:
-            db.update_job_relevance(job["id"], "relevant")
-            counts["relevant"] += 1
-            logger.info(f"  [LLM] 保留: {title} ({reason})")
-        else:
-            db.update_job_relevance(job["id"], "irrelevant", status="filtered")
-            counts["irrelevant"] += 1
-            logger.info(f"  [LLM] 排除: {title} ({reason})")
+    for r in results:
+        counts[r] += 1
 
     return counts

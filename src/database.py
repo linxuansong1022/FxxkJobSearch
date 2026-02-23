@@ -46,7 +46,9 @@ class JobDatabase:
 
     def __init__(self, db_path: Path):
         self.db_path = db_path
-        self.conn = sqlite3.connect(str(db_path))
+        # 增加 timeout 并且启用 WAL 模式以支持更高并发，防止 database is locked
+        self.conn = sqlite3.connect(str(db_path), timeout=30.0, isolation_level=None)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.row_factory = sqlite3.Row
         self._init_tables()
         self._run_migrations()

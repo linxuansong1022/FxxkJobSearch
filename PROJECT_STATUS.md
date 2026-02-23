@@ -9,19 +9,27 @@
 
 目前 Agent 已经具备了完整的 **采集 -> 筛选 -> 分析 -> 通知** 闭环能力。
 
-| 模块 | 状态 | 描述 |
-| :--- | :--- | :--- |
-| **Scraper (采集)** | ✅ 已实现 | 支持 **LinkedIn**, **Indeed** (通过 JobSpy) 和 **The Hub** (API) 的职位采集。包含自动去重和增量更新。 |
-| **Filter (初筛)** | ✅ 已实现 | 基于规则（关键词黑/白名单、发布时间）快速过滤不相关职位，节省 API 成本。 |
-| **Analyzer (分析)** | ✅ **核心升级** | 集成 **Gemini 3 Pro Preview** 模型。支持 **Thinking Mode** (深度思考) 和 **动态简历加载** (根据 `profile.yaml` 实时分析匹配度)。 |
-| **Matcher (向量)** | ✅ 已实现 | 使用 Vertex AI Embeddings 计算简历 Bullet Points 与 JD 的余弦相似度，用于简历生成。 |
-| **Generator (生成)** | ✅ 已实现 | 基于 Jinja2 + LaTeX (Tectonic) 自动生成针对特定职位的 PDF 简历。 |
-| **Notifier (通知)** | ✅ **新增** | 集成 **Telegram Bot**，每日自动推送 Top 10 高匹配职位。 |
-| **Security (安全)** | ✅ 已实现 | 敏感信息 (API Key, Token) 移至 `.env`，个人信息 (`profile.yaml`) 从 git 移除。 |
+| 模块                 | 状态           | 描述                                                                                                                             |
+| :------------------- | :------------- | :------------------------------------------------------------------------------------------------------------------------------- |
+| **Scraper (采集)**   | ✅ 已实现       | 支持 **LinkedIn**, **Indeed** (通过 JobSpy) 和 **The Hub** (API) 的职位采集。包含自动去重和增量更新。                            |
+| **Filter (初筛)**    | ✅ 已实现       | 基于规则（关键词黑/白名单、发布时间）快速过滤不相关职位，节省 API 成本。                                                         |
+| **Analyzer (分析)**  | ✅ **核心升级** | 集成 **Gemini 3 Pro Preview** 模型。支持 **Thinking Mode** (深度思考) 和 **动态简历加载** (根据 `profile.yaml` 实时分析匹配度)。 |
+| **Matcher (向量)**   | ✅ 已实现       | 使用 Vertex AI Embeddings 计算简历 Bullet Points 与 JD 的余弦相似度，用于简历生成。                                              |
+| **Generator (生成)** | ⚠️ **存在 Bug** | 基于 Jinja2 + LaTeX (Tectonic) 自动生成 PDF 简历。**目前存在乱码、排版错乱及字段缺失问题，需优先修复。**                         |
+| **Notifier (通知)**  | ✅ **新增**     | 集成 **Telegram Bot**，每日自动推送 Top 10 高匹配职位。                                                                          |
+| **Security (安全)**  | ✅ 已实现       | 敏感信息 (API Key, Token) 移至 `.env`，个人信息 (`profile.yaml`) 从 git 移除。                                                   |
 
 ---
 
 ## 2. 今日更新日志 (2026-02-18)
+
+### 🐛 待修复 Bug (Generator 模块)
+1.  **中文乱码 (Encoding Issue)**:
+    - 生成的 LaTeX PDF 中，中文字符显示为乱码或方框 (可能是字体配置缺失)。
+2.  **排版错乱 (Layout Misalignment)**:
+    - 简历各板块间距不一致，列表项缩进异常。
+3.  **字段缺失 (Missing Fields)**:
+    - 部分 `profile.yaml` 中的字段 (如 Skills 的某些分类) 未能正确注入到模板中，导致生成的简历内容不完整。
 
 ### ✨ 新增功能
 1.  **Telegram 通知模块**:

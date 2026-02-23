@@ -147,98 +147,6 @@ def scrape_thehub(db: JobDatabase) -> int:
     return new_count
 
 
-# ============================================================
-# 3. LinkedIn JD 补全
-# ============================================================
-
-def backfill_linkedin_jd(db: JobDatabase) -> int:
-    """
-    对 JD 过短的 LinkedIn 职位，通过访问职位页面补全 JD。
-
-    JobSpy 的 LinkedIn 模式经常只返回标题，不含完整 JD。
-    这里用 httpx 访问 LinkedIn 公开职位页，提取 JD 文本。
-    """
-    # 找出 JD 过短的职位（< 100 字符）
-    cursor = db.conn.execute(
-        """SELECT id, url, title FROM jobs
-           WHERE platform = 'linkedin'
-             AND (jd_text IS NULL OR length(jd_text) < 100)
-             AND status != 'filtered'"""
-    )
-    short_jd_jobs = [dict(row) for row in cursor.fetchall()]
-
-    if not short_jd_jobs:
-        logger.info("没有需要补全 JD 的 LinkedIn 职位")
-        return 0
-
-    logger.info(f"需要补全 JD 的 LinkedIn 职位: {len(short_jd_jobs)} 条")
-    filled_count = 0
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-
-    for job in short_jd_jobs:
-        url = job.get("url", "")
-        if not url or "linkedin.com" not in url:
-            continue
-
-        logger.info(f"  补全: {job['title']} ({url[:60]}...)")
-        try:
-            resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
-            if resp.status_code != 200:
-                logger.debug(f"    HTTP {resp.status_code}")
-                continue
-
-            html = resp.text
-            # LinkedIn 公开页面的 JD 通常在 <div class="show-more-less-html__markup"> 中
-            # 或者在 <div class="description__text"> 中
-            jd_text = _extract_linkedin_jd(html)
-
-            if jd_text and len(jd_text) > 100:
-                db.update_job_jd(job["id"], jd_text)
-                filled_count += 1
-                logger.info(f"    补全成功: {len(jd_text)} 字")
-            else:
-                logger.debug(f"    未提取到有效 JD")
-
-        except Exception as e:
-            logger.debug(f"    请求失败: {e}")
-
-        # 友好延迟，避免被封
-        time.sleep(random.uniform(2, 4))
-
-    return filled_count
-
-
-def _extract_linkedin_jd(html: str) -> str:
-    """从 LinkedIn 职位页面 HTML 中提取 JD 文本"""
-    from src.utils import clean_html
-    import re
-
-    # 方法1：找 show-more-less-html__markup 块
-    pattern1 = r'<div class="show-more-less-html__markup[^"]*"[^>]*>(.*?)</div>'
-    match = re.search(pattern1, html, re.DOTALL)
-    if match:
-        return clean_html(match.group(1))
-
-    # 方法2：找 description__text 块
-    pattern2 = r'<div class="description__text[^"]*"[^>]*>(.*?)</div>'
-    match = re.search(pattern2, html, re.DOTALL)
-    if match:
-        return clean_html(match.group(1))
-
-    # 方法3：找 JSON-LD 中的 description
-    pattern3 = r'"description"\s*:\s*"((?:[^"\\]|\\.)*)"'
-    match = re.search(pattern3, html)
-    if match:
-        desc = match.group(1).encode().decode('unicode_escape', errors='ignore')
-        return clean_html(desc)
-
-    return ""
-
 
 # ============================================================
 # 统一入口
@@ -247,6 +155,32 @@ def _extract_linkedin_jd(html: str) -> str:
 def scrape_all_platforms(db: JobDatabase) -> int:
     """运行所有采集器，返回总新增数"""
     total = 0
-    total += scrape_jobspy(db)
+
+    # Tavily (替代 JobSpy, 覆盖 LinkedIn/Indeed/Glassdoor)
+    try:
+        from src.scraper_tavily import scrape_tavily
+        total += scrape_tavily(db)
+    except Exception as e:
+        logger.warning(f"Tavily 采集失败: {e}")
+        # Fallback 到 JobSpy
+        logger.info("Fallback 到 JobSpy")
+        total += scrape_jobspy(db)
+
+    # TheHub (丹麦创业公司)
     total += scrape_thehub(db)
+
+    # Jobindex (丹麦本地)
+    try:
+        from src.scraper_jobindex import scrape_jobindex
+        total += scrape_jobindex(db)
+    except Exception as e:
+        logger.warning(f"Jobindex 采集失败: {e}")
+
+    # 公司官网直抓 (基于公司列表)
+    try:
+        from src.scraper_careers import scrape_company_careers
+        total += scrape_company_careers(db)
+    except Exception as e:
+        logger.warning(f"公司官网采集失败: {e}")
+
     return total

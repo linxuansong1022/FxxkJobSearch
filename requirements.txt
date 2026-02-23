@@ -12,6 +12,13 @@ jinja2>=3.1.0               # LaTeX 模板渲染
 pyyaml>=6.0                 # profile.yaml 解析
 python-dotenv>=1.0.0        # 读取 .env 环境变量
 
+# 动态网页抓取
+playwright>=1.40              # Company career page rendering (JS)
+
+# 测试
+pytest>=7.0                   # Test framework
+pytest-asyncio>=0.21          # Async test support
+
 # Tectonic 需要系统安装，不是 pip 包
 # macOS: brew install tectonic
 # Linux: cargo install tectonic

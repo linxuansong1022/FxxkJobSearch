@@ -31,16 +31,28 @@ GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 GOOGLE_CLOUD_API_KEY = os.getenv("GOOGLE_CLOUD_API_KEY", "")
 
 # 主分析模型
-GEMINI_MODEL = "gemini-3-pro-preview" 
+GEMINI_MODEL = "gemini-2.5-pro"
 
-# 快速过滤模型 (暂且也用 gemini-3-flash-preview 如果存在，或者保持 1.5-flash)
-GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp" # 或 gemini-1.5-flash
+# 快速模型 (编排/过滤/Agent 日常使用)
+GEMINI_FLASH_MODEL = "gemini-2.5-flash"
 
 EMBEDDING_MODEL = "text-embedding-004"
 EMBEDDING_DIMENSION = 768
 
 # ============================================================
-# 采集配置
+# Tavily Search API (替代 JobSpy)
+# ============================================================
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+TAVILY_SEARCH_CONFIG = {
+    "time_range": "day",          # "day" / "week" / "month"
+    "max_results_per_query": 10,
+    "include_domains": [
+        "linkedin.com/jobs",
+        "indeed.com",
+        "glassdoor.com",
+        "wellfound.com",
+    ],
+}
 # ============================================================
 
 # JobSpy 搜索关键词列表（轮询执行，降低单次频率）

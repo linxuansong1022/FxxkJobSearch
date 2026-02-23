@@ -88,7 +88,14 @@ def send_daily_report(db: JobDatabase):
     top_jobs = jobs[:10]  # 修改为前10个
 
     if not top_jobs:
-        logger.info("今日无高分职位，跳过通知")
+        logger.info("今日无高分职位，发送简要状态报告")
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        counts = db.get_status_counts()
+        msg = f"📅 *求职日报 ({date_str})*\n\n"
+        msg += f"ℹ️ 今日暂无匹配度 > 0.6 的高匹配职位。\n"
+        msg += f"📊 当前数据库概览：已分析 {counts.get('analyzed', 0)} 个，待分析 {counts.get('new', 0)} 个。\n\n"
+        msg += "☕️ 只要有合适的，我会第一时间推给你！"
+        _send_message(msg)
         return
 
     # 2. 构造消息
