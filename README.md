@@ -50,8 +50,10 @@ python main.py scrape    # Collect jobs
 python main.py filter    # Filter irrelevant ones
 python main.py analyze   # Score with Gemini Pro
 python main.py report    # Send Telegram notification
-python main.py resume    # Generate tailored resumes (LaTeX → PDF)
 python main.py status    # Check database stats
+
+# Import your resume to generate profile.yaml
+python main.py import-resume path/to/resume.pdf
 ```
 
 ## Server Deployment
@@ -102,7 +104,16 @@ Minimum requirements: 1 CPU, 1GB RAM, 1GB disk.
 
 ## Candidate Profile (`profile.yaml`)
 
-The pipeline uses `profile.yaml` to personalize job scoring and resume generation. Edit it with your own info:
+The pipeline uses `profile.yaml` to personalize job scoring. You can either:
+
+### Option A: Import from resume PDF (recommended)
+```bash
+python main.py import-resume path/to/your-resume.pdf
+```
+Gemini will parse your resume and generate a structured `profile.yaml` automatically. You can then manually edit it to fix or add details.
+
+### Option B: Write manually
+Create `profile.yaml` with this structure:
 
 ```yaml
 personal:

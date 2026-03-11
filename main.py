@@ -9,7 +9,7 @@ FxxkJobSearch — CLI 入口
     python main.py status      # 查看数据库统计
     python main.py list        # 列出所有相关职位
     python main.py report      # 发送 Telegram 通知
-    python main.py resume      # 📄 为高分职位生成定制简历 (LaTeX → PDF)
+    python main.py import-resume resume.pdf  # 📄 导入简历 PDF → 生成 profile.yaml
     python main.py agent       # 🤖 运行 Multi-Agent 系统 (v2.0 主干)
     python main.py mcp-server  # 启动 MCP Tool Server
     python main.py evaluate    # 运行 Agent 评估
@@ -142,12 +142,13 @@ async def cmd_agent(db: JobDatabase):
         memory.close()
 
 
-def cmd_resume(db: JobDatabase):
-    """为高分职位生成定制简历"""
-    from src.builder import generate_resumes
-    logger.info("开始生成定制简历...")
-    count = generate_resumes(db)
-    logger.info(f"简历生成完成: {count} 份 PDF 输出到 {config.OUTPUT_DIR}")
+def cmd_import_resume(args):
+    """导入简历 PDF，解析生成 profile.yaml"""
+    if not args.file:
+        print("用法: python main.py import-resume <resume.pdf>")
+        sys.exit(1)
+    from src.profile_importer import import_resume
+    import_resume(args.file)
 
 
 def cmd_mcp_server(db: JobDatabase):
@@ -170,12 +171,23 @@ def main():
         "command",
         choices=[
             "run", "scrape", "filter", "analyze",
-            "status", "list", "report", "resume",
+            "status", "list", "report", "import-resume",
             "agent", "mcp-server", "evaluate",
         ],
         help="要执行的命令",
     )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        default=None,
+        help="简历 PDF 文件路径 (仅 import-resume 使用)",
+    )
     args = parser.parse_args()
+
+    # import-resume 不需要数据库
+    if args.command == "import-resume":
+        cmd_import_resume(args)
+        return
 
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     db = JobDatabase(config.DB_PATH)
@@ -188,7 +200,6 @@ def main():
         "status": cmd_status,
         "list": cmd_list,
         "report": cmd_report,
-        "resume": cmd_resume,
         "agent": cmd_agent,
         "mcp-server": cmd_mcp_server,
         "evaluate": cmd_evaluate,
