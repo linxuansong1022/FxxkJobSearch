@@ -44,25 +44,40 @@ EMBEDDING_DIMENSION = 768
 # ============================================================
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 TAVILY_SEARCH_CONFIG = {
-    "time_range": "day",          # "day" / "week" / "month"
-    "max_results_per_query": 10,
+    "time_range": "week",          # "day" / "week" / "month" — week覆盖更广
+    "max_results_per_query": 20,
     "include_domains": [
         "linkedin.com/jobs",
         "indeed.com",
         "glassdoor.com",
         "wellfound.com",
+        "jobindex.dk",
     ],
 }
 # ============================================================
 
 # JobSpy 搜索关键词列表（轮询执行，降低单次频率）
 SEARCH_QUERIES = [
+    # === 核心匹配 (Python / AI) ===
     "Python Intern",
     "AI Engineer Intern",
     "Machine Learning Intern",
     "Data Science Student",
     "LLM Engineer Intern",
     "RAG Developer",
+    # === 扩展覆盖 (Backend / Fullstack) ===
+    "Backend Developer Intern",
+    "Software Engineer Intern",
+    "Full Stack Developer Intern",
+    "Data Engineer Student",
+    "Cloud Engineer Intern",
+    "DevOps Intern",
+    # === 丹麦语变体 ===
+    "studiejob software",
+    "praktikant data science",
+    "studentermedhjælper IT",
+    # === Research ===
+    "Research Assistant Computer Science",
 ]
 
 # JobSpy 通用参数

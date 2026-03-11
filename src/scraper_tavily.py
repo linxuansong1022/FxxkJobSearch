@@ -48,26 +48,51 @@ def _extract_company_from_content(content: str, url: str) -> str:
 
 
 def _is_job_detail_url(url: str) -> bool:
-    """判断是否是具体的职位详情页，而非搜索结果页或公司主页"""
+    """严格判断是否是具体的职位详情页，而非搜索结果页或公司主页"""
     url_lower = url.lower()
-    
-    # LinkedIn: 必须包含 /jobs/view/ 或 /jobs/collections/ (通常带具体ID)
-    if "linkedin.com" in url_lower:
-        return "/jobs/view/" in url_lower or "/jobs/collections/" in url_lower
-        
-    # Indeed: 必须包含 /viewjob 或 /rc/clk
+
+    # Indeed: 只接受 /viewjob, /rc/clk, /pagead (赞助链接也是具体职位)
     if "indeed.com" in url_lower:
-        return "/viewjob" in url_lower or "/rc/clk" in url_lower
-        
-    # Glassdoor: 必须包含 /job-listing/ 或 /job/ (带具体ID)
+        return any(p in url_lower for p in ["/viewjob", "/rc/clk", "/pagead"])
+
+    # LinkedIn: 必须是 /jobs/view/ 后跟数字ID (可带slug前缀)
+    if "linkedin.com" in url_lower:
+        return bool(re.search(r"/jobs/view/[\w-]*\d+", url_lower))
+
+    # Glassdoor: 只接受 /job-listing/，排除 SRCH_ 搜索结果页
     if "glassdoor.com" in url_lower:
-        return "/job-listing/" in url_lower or "/job/" in url_lower
-        
-    # Wellfound: 通常是 /jobs/ 开头后接具体职位
+        if "srch_" in url_lower or "-jobs-srch" in url_lower:
+            return False
+        return "/job-listing/" in url_lower
+
+    # Wellfound: /jobs/后面必须有具体slug (至少两层路径)
     if "wellfound.com" in url_lower:
-        return "/jobs/" in url_lower and not url_lower.endswith("/jobs/")
-        
-    return True # 其他未知平台默认允许，后续由 LLM 进一步判断
+        return bool(re.search(r"/jobs/.+/.+", url_lower))
+
+    # Jobindex: 只接受 /jobannonce/ 详情页
+    if "jobindex.dk" in url_lower:
+        return "/jobannonce/" in url_lower
+
+    return True  # 未知平台放行
+
+
+# 聚合页标题检测
+_AGGREGATE_PATTERNS = [
+    r"^\d+\+?\s+.*jobs?\s+(in|near|around|i\s)",   # "84 student intern Jobs in Denmark"
+    r"^\d+\+?\s+.*jobs?\s*$",                       # "17 Ai engineer jobs" (no location)
+    r"\bjobs?\s+i\s+[a-zæøå]",                      # Danish: "Data Science jobs i København"
+    r"^\d+\+?\s+.*positions?\s+(in|near)",
+    r"jobs?,\s*(ansættelse|hiring|february|march|january|april|may|june)",
+    r"(søger|looking for)\s+\d+",
+    r"top\s+\d+\s+.*jobs",
+    r"^[a-z\s]+jobs?\s*$",                            # "Research assistant Jobs" (bare topic + jobs)
+]
+
+
+def _is_aggregate_title(title: str) -> bool:
+    """检测标题是否是搜索结果聚合页，而非具体岗位"""
+    title_lower = title.lower().strip()
+    return any(re.search(p, title_lower) for p in _AGGREGATE_PATTERNS)
 
 def _extract_title_from_result(title: str, url: str) -> str:
     """清理搜索结果标题，提取职位名称"""
@@ -141,6 +166,12 @@ def scrape_tavily(db: JobDatabase) -> int:
 
             # 提取职位信息
             title = _extract_title_from_result(title_raw, url)
+
+            # 聚合页标题检测
+            if _is_aggregate_title(title):
+                logger.debug(f"  [SKIP] 聚合页标题: {title}")
+                continue
+
             company = _extract_company_from_content(content, url)
 
             # 判断平台

@@ -17,6 +17,7 @@ env/
 *.db
 jobs.db
 output/
+debug_*.txt
 resume/resume.tex
 resume/resume.pdf
 resume/*.aux

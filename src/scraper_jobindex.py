@@ -36,6 +36,11 @@ JOBINDEX_QUERIES = [
     "data science studiejob",
     "software developer intern",
     "backend developer intern",
+    "full stack studiejob",
+    "cloud engineer praktikant",
+    "MLOps intern",
+    "data engineer studiejob",
+    "IT praktikant København",
 ]
 
 SEARCH_URL = "https://www.jobindex.dk/jobsoegning"

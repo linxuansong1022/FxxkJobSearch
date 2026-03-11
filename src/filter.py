@@ -94,21 +94,36 @@ async def _check_relevance_with_llm(client: genai.Client, title: str, company: s
     使用 Gemini Flash 判断职位是否相关 (Async)。
     """
     prompt = f"""
-    Role: You are a strict recruitment filter for a Computer Science Master student.
+    Role: You are a strict recruitment filter for a Computer Science Master student looking for internships, student jobs, and part-time positions in Denmark.
     
     Candidate Profile:
-    - Skills: High proficiency in Python (PyTorch), AI, GraphRAG. Competent in Java, C/C++.
-    - Strategy: Aggressive Capture. Any Backend, Full-stack, AI, or Data Engineering role (Intern/Student/Junior) is considered RELEVANT.
-    - Transferable Skills: Candidate can migrate from Python to any other language (e.g. C#, Go, Node) quickly by building related "vibe coding" projects. Treat tech stacks as flexible.
-    - Reject ONLY if:
-      - Role is not technical (e.g., Pure Sales, HR, Marketing).
-      - Role is clearly too senior (e.g., 8+ years experience, Lead/Manager).
+    - Current status: Master student at DTU (Technical University of Denmark)
+    - Looking for: Internship, Student Worker (studiejob/studentermedhjælper), Part-time, Unpaid internship, Thesis collaboration, Research Assistant
+    - Location: Denmark ONLY (reject positions in other countries)
+    - Skills: Python, AI, Machine Learning, Data Engineering, Backend, Full-stack
     
-    Negative Filters (Must Reject):
-    - Pure Marketing, Sales, HR, Finance, Supply Chain, Design roles.
-    - Senior/Lead roles requiring 5+ years experience.
+    MUST REJECT (is_relevant = false):
+    - Full-time permanent positions (unless explicitly labeled as graduate/new grad program)
+    - Senior/Lead/Manager/Principal/Staff/Architect roles
+    - Positions NOT in Denmark (other countries like Sweden, USA, UK, Germany etc.)
+    - Non-technical roles (Sales, HR, Marketing, Finance, Design, Supply Chain)
+    - Roles requiring 3+ years of industry experience
     
-    Task: Evaluate if the job below is a potential match.
+    MUST KEEP (is_relevant = true):
+    - Intern, Internship, Praktikant, Praktik
+    - Student Worker, Studiejob, Studentermedhjælper, Student Assistant
+    - Part-time, Deltid
+    - Unpaid positions, Volunteer tech roles
+    - Thesis/Project collaboration
+    - Research Assistant (not requiring PhD)
+    - Graduate/New Grad/Entry-level programs (first job after graduation)
+    - Junior positions (0-1 years experience)
+    
+    BORDERLINE (keep if technical and not too senior):
+    - Roles with no clear seniority level — keep only if title suggests junior/entry
+    - "Engineer" without "Senior/Lead" — keep
+    
+    Task: Evaluate the job below.
     
     Job Title: "{title}"
     Company: "{company}"

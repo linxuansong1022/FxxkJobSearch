@@ -273,10 +273,6 @@ def scrape_company_careers(db: JobDatabase, max_companies: Optional[int] = None)
             
         logger.debug(f"      获取文本长度: {len(text_content)}")
         
-        # [DEBUG] Save text output to file
-        with open(f"debug_{name.replace(' ', '_')}.txt", "w", encoding="utf-8") as f:
-            f.write(text_content)
-        
         # 2. LLM 提取职位
         extracted_jobs = _extract_jobs_with_llm(llm, text_content, name, final_url)
         logger.info(f"      LLM 提取到 {len(extracted_jobs)} 条技术类职位")

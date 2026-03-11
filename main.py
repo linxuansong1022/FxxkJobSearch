@@ -53,6 +53,12 @@ async def cmd_filter(db: JobDatabase):
 
 async def cmd_analyze(db: JobDatabase):
     """分析 JD (Async)"""
+    # Phase 2: 先补全缺失的 JD
+    logger.info("开始补全缺失 JD...")
+    from src.jd_fetcher import backfill_missing_jds
+    backfilled = await backfill_missing_jds(db)
+    logger.info(f"JD 补全完成: {backfilled} 条")
+
     logger.info("开始分析 JD...")
     analyzed_count = await analyze_pending_jobs(db)
     logger.info(f"分析完成，处理了 {analyzed_count} 条职位")

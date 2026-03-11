@@ -11,6 +11,7 @@ SQLite 存储层
 import sqlite3
 import json
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 _MIGRATIONS = [
     "ALTER TABLE jobs ADD COLUMN posted_at TEXT",
     "ALTER TABLE jobs ADD COLUMN relevance TEXT DEFAULT 'unscored'",
+    "ALTER TABLE jobs ADD COLUMN notified_at TEXT",
 ]
 
 
@@ -74,6 +76,12 @@ class JobDatabase:
             platform, platform_id, title, company, url,
             content_hash, jd_text, posted_at (可选)
         """
+        # 最后防线：拒绝明显的聚合标题 (e.g. "84 student intern Jobs in Denmark")
+        title = job_data.get("title", "")
+        if re.match(r"^\d+\+?\s+\w+.*jobs?\s", title, re.IGNORECASE):
+            logger.debug(f"拒绝聚合标题入库: {title}")
+            return False
+
         try:
             self.conn.execute(
                 """

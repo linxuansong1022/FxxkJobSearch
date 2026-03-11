@@ -215,6 +215,23 @@ FETCH_JOB_DETAIL = ToolSpec(
     handler=handle_fetch_job_detail,
 )
 
+# Backfill Tools
+async def handle_backfill_jds(db, **kwargs) -> dict:
+    """批量补全缺失的 JD"""
+    from src.jd_fetcher import backfill_missing_jds
+    count = await backfill_missing_jds(db)
+    return {"status": "success", "backfilled": count}
+
+BACKFILL_JDS = ToolSpec(
+    name="backfill_jds",
+    description=(
+        "对 JD 缺失或过短 (<200字) 的已筛选职位，"
+        "访问原始链接补全完整 JD 文本。应在 filter 之后、analyze 之前调用。"
+    ),
+    parameters={"type": "object", "properties": {}},
+    handler=handle_backfill_jds,
+)
+
 # Notification Tools
 SEND_NOTIFICATION = ToolSpec(
     name="send_notification",
@@ -230,7 +247,7 @@ SEND_NOTIFICATION = ToolSpec(
 
 SCOUT_TOOLS = [SCRAPE_LINKEDIN, SCRAPE_THEHUB, SCRAPE_JOBINDEX, SCRAPE_COMPANY_CAREERS, FETCH_JOB_DETAIL]
 FILTER_TOOLS = [FILTER_JOBS, GET_DB_STATUS]
-ANALYST_TOOLS = [ANALYZE_JOBS, FETCH_JOB_DETAIL, GET_DB_STATUS]
+ANALYST_TOOLS = [ANALYZE_JOBS, BACKFILL_JDS, FETCH_JOB_DETAIL, GET_DB_STATUS]
 NOTIFIER_TOOLS = [SEND_NOTIFICATION, GET_DB_STATUS]
 ALL_TOOLS = [SCRAPE_LINKEDIN, SCRAPE_THEHUB, SCRAPE_JOBINDEX, SCRAPE_COMPANY_CAREERS,
-             GET_DB_STATUS, FILTER_JOBS, ANALYZE_JOBS, FETCH_JOB_DETAIL, SEND_NOTIFICATION]
+             GET_DB_STATUS, FILTER_JOBS, ANALYZE_JOBS, BACKFILL_JDS, FETCH_JOB_DETAIL, SEND_NOTIFICATION]
