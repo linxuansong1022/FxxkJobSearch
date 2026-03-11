@@ -14,6 +14,16 @@ FxxkJobSearch is an automated pipeline that scrapes job listings from multiple D
 
 ## Setup
 
+### Docker (recommended for cloud agents)
+```bash
+git clone https://github.com/linxuansong1022/FxxkJobSearch.git
+cd FxxkJobSearch
+cp .env.example .env
+# Fill in API keys in .env, then:
+docker compose up --build
+```
+
+### Manual
 ```bash
 # 1. Clone
 git clone https://github.com/linxuansong1022/FxxkJobSearch.git
@@ -36,6 +46,14 @@ cp .env.example .env
 
 ## Running
 
+### Docker
+```bash
+docker compose run fxxkjobsearch run       # Full pipeline
+docker compose run fxxkjobsearch scrape    # Scrape only
+docker compose run fxxkjobsearch status    # Check stats
+```
+
+### Direct
 ### One-Shot (full pipeline)
 ```bash
 source venv/bin/activate

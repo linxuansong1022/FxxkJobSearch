@@ -55,8 +55,41 @@ python main.py status    # Check database stats
 
 ## Server Deployment
 
+### Option 1: Docker (recommended for cloud / OpenClaw)
+
 ```bash
-# On your server (Ubuntu/Debian)
+git clone https://github.com/linxuansong1022/FxxkJobSearch.git
+cd FxxkJobSearch
+
+# Configure
+cp .env.example .env   # Fill in API keys
+vim profile.yaml       # Your skills and preferences
+
+# Build & Run (one-shot full pipeline)
+docker compose up --build
+
+# Or run individual steps
+docker compose run fxxkjobsearch scrape
+docker compose run fxxkjobsearch filter
+docker compose run fxxkjobsearch analyze
+docker compose run fxxkjobsearch report
+docker compose run fxxkjobsearch status
+```
+
+The SQLite database persists in `./data/jobs.db` via Docker volume.
+
+For daily scheduled runs (cron on host):
+```bash
+crontab -e
+# Add: 0 9 * * * cd /path/to/FxxkJobSearch && docker compose run --rm fxxkjobsearch run >> data/daily.log 2>&1
+```
+
+### Option 2: Direct (Ubuntu/Debian)
+
+### Option 2: Direct (Ubuntu/Debian)
+
+```bash
+# On your server
 git clone https://github.com/linxuansong1022/FxxkJobSearch.git
 cd FxxkJobSearch
 chmod +x deploy.sh && ./deploy.sh

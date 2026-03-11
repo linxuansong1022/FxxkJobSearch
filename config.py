@@ -17,10 +17,10 @@ load_dotenv()
 # ============================================================
 BASE_DIR = Path(__file__).parent
 RESUME_DIR = BASE_DIR / "resume"
-OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(BASE_DIR / "output")))
 TEMPLATE_PATH = RESUME_DIR / "template.tex"
 PROFILE_PATH = BASE_DIR / "profile.yaml"
-DB_PATH = BASE_DIR / "jobs.db"
+DB_PATH = Path(os.getenv("DB_PATH", str(BASE_DIR / "jobs.db")))
 
 # ============================================================
 # Google Cloud / Vertex AI 配置

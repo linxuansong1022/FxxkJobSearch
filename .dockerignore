@@ -1,0 +1,16 @@
+__pycache__
+*.pyc
+*.pyo
+venv/
+.env
+.git
+.gitignore
+output/
+data/
+jobs.db
+*.db
+debug_*.txt
+*.aux
+*.fdb_latexmk
+*.fls
+Downloads/

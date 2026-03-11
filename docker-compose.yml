@@ -1,0 +1,9 @@
+services:
+  fxxkjobsearch:
+    build: .
+    image: fxxkjobsearch:latest
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./profile.yaml:/app/profile.yaml:ro
+    command: ["run"]
