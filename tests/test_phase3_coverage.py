@@ -136,5 +136,5 @@ class TestCompanyListCareerUrls:
     def test_more_career_urls_filled(self):
         from src.company_list import DENMARK_TECH_COMPANIES
         filled = sum(1 for c in DENMARK_TECH_COMPANIES if c.get("career_url"))
-        # At least 19 should now have career_url (was ~10 before)
-        assert filled >= 18
+        # At least 65 should now have career_url (was ~19 before)
+        assert filled >= 60

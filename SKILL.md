@@ -64,7 +64,7 @@ crontab -e
 
 | Step | Duration | What it does |
 |------|----------|-------------|
-| `scrape` | ~8 min | Tavily (16 queries), Jobindex (11 queries), TheHub API, 19 company career sites via Playwright |
+| `scrape` | ~30 min | Tavily (16 queries), Jobindex (11 queries), TheHub API, 65 company career sites via Playwright |
 | `filter` | ~30 sec | Rule-based + Gemini Flash to keep only intern/student/part-time in Denmark |
 | `analyze` | ~3 min | Ranks top 15 candidates, deep-analyzes with Gemini Pro, scores 0–1 |
 | `report` | ~2 sec | Pushes matching jobs to Telegram with scores and apply links |

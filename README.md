@@ -12,7 +12,7 @@ Scrape → Filter → JD Backfill → Analyze → Notify
    - [Tavily Search API](https://tavily.com/) (LinkedIn, Indeed, Glassdoor, Jobindex)
    - [Jobindex.dk](https://www.jobindex.dk/) direct scraping
    - [TheHub.io](https://thehub.io/) Danish startup API
-   - 19 company career pages via Playwright + Gemini Flash
+   - 65 company career pages via Playwright + Gemini Flash
 
 2. **Filter** — Two-layer filtering:
    - Rule-based: excludes non-tech titles (HR, Sales, Marketing…) and senior roles
