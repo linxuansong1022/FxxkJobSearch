@@ -104,3 +104,7 @@ tests/               # 164 tests (pytest)
 - **Playwright** for JS-rendered career pages
 - **SQLite** for job storage
 - **Telegram Bot API** for notifications
+
+## AI Agent Integration
+
+See [SKILL.md](SKILL.md) for a complete operator skill file that AI agents (OpenClaw, Claude, etc.) can use to automatically deploy and run this pipeline.
