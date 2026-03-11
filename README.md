@@ -50,6 +50,7 @@ python main.py scrape    # Collect jobs
 python main.py filter    # Filter irrelevant ones
 python main.py analyze   # Score with Gemini Pro
 python main.py report    # Send Telegram notification
+python main.py resume    # Generate tailored resumes (LaTeX → PDF)
 python main.py status    # Check database stats
 ```
 
@@ -86,8 +87,6 @@ crontab -e
 
 ### Option 2: Direct (Ubuntu/Debian)
 
-### Option 2: Direct (Ubuntu/Debian)
-
 ```bash
 # On your server
 git clone https://github.com/linxuansong1022/FxxkJobSearch.git
@@ -100,6 +99,38 @@ crontab -e
 ```
 
 Minimum requirements: 1 CPU, 1GB RAM, 1GB disk.
+
+## Candidate Profile (`profile.yaml`)
+
+The pipeline uses `profile.yaml` to personalize job scoring and resume generation. Edit it with your own info:
+
+```yaml
+personal:
+  name: "Your Name"
+  email: "you@example.com"
+  linkedin: "https://linkedin.com/in/you"
+
+education:
+  - school: "Your University"
+    degree: "MSc in Computer Science"
+    dates: "2024 -- 2026"
+    bullets: []
+
+experiences:
+  - company: "Company A"
+    role: "Software Intern"
+    dates: "Jun. -- Aug. 2024"
+    bullets:
+      - "Built X using Y, improved Z by N%"
+
+skills:
+  languages: "Python, Java, SQL"
+  frameworks: "FastAPI, PyTorch"
+  tools: "Git, Docker"
+```
+
+- **Scoring**: `analyzer.py` reads your profile to match skills against JD requirements
+- **Resume generation**: `builder.py` selects the most relevant bullets via embedding similarity and renders a tailored LaTeX resume
 
 ## Configuration
 
