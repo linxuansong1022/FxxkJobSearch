@@ -42,12 +42,31 @@ cp .env.example .env
 # Edit .env with your API keys (Tavily, Google Cloud, Telegram)
 # Edit profile.yaml with your skills and preferences
 
-# Run
+# Run full pipeline (scrape → filter → analyze → notify)
+python main.py run
+
+# Or run steps individually
 python main.py scrape    # Collect jobs
 python main.py filter    # Filter irrelevant ones
 python main.py analyze   # Score with Gemini Pro
 python main.py report    # Send Telegram notification
+python main.py status    # Check database stats
 ```
+
+## Server Deployment
+
+```bash
+# On your server (Ubuntu/Debian)
+git clone https://github.com/linxuansong1022/FxxkJobSearch.git
+cd FxxkJobSearch
+chmod +x deploy.sh && ./deploy.sh
+
+# Edit .env and profile.yaml, then set up daily cron:
+crontab -e
+# Add: 0 9 * * * cd /path/to/FxxkJobSearch && source venv/bin/activate && python main.py run >> logs/daily.log 2>&1
+```
+
+Minimum requirements: 1 CPU, 1GB RAM, 1GB disk.
 
 ## Configuration
 

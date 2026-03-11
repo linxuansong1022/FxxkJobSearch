@@ -2,11 +2,13 @@
 FxxkJobSearch — CLI 入口
 
 用法:
+    python main.py run         # 🚀 一键全流程: 采集→过滤→分析→通知
     python main.py scrape      # [仅测试] 采集职位
     python main.py filter      # [仅测试] 过滤不相关职位
     python main.py analyze     # [仅测试] 用 Gemini 分析 JD
     python main.py status      # 查看数据库统计
     python main.py list        # 列出所有相关职位
+    python main.py report      # 发送 Telegram 通知
     python main.py agent       # 🤖 运行 Multi-Agent 系统 (v2.0 主干)
     python main.py mcp-server  # 启动 MCP Tool Server
     python main.py evaluate    # 运行 Agent 评估
@@ -37,6 +39,16 @@ def cmd_scrape(db: JobDatabase):
     logger.info("开始采集职位...")
     new_count = scrape_all_platforms(db)
     logger.info(f"采集完成，新增 {new_count} 条职位")
+
+
+async def cmd_run(db: JobDatabase):
+    """一键全流程: 采集→过滤→分析→通知"""
+    logger.info("=== 开始全流程 ===")
+    cmd_scrape(db)
+    await cmd_filter(db)
+    await cmd_analyze(db)
+    cmd_report(db)
+    logger.info("=== 全流程完成 ===")
 
 
 async def cmd_filter(db: JobDatabase):
@@ -148,7 +160,7 @@ def main():
     parser.add_argument(
         "command",
         choices=[
-            "scrape", "filter", "analyze",
+            "run", "scrape", "filter", "analyze",
             "status", "list", "report",
             "agent", "mcp-server", "evaluate",
         ],
@@ -160,6 +172,7 @@ def main():
     db = JobDatabase(config.DB_PATH)
 
     commands = {
+        "run": cmd_run,
         "scrape": cmd_scrape,
         "filter": cmd_filter,
         "analyze": cmd_analyze,
