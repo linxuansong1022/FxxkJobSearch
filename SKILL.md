@@ -10,7 +10,27 @@ FxxkJobSearch is an automated pipeline that scrapes job listings from multiple D
 
 - Python 3.10+
 - API Keys: Google Gemini, Tavily Search, Telegram Bot
-- ~1GB RAM (for Playwright headless browser)
+
+## Deployment Modes
+
+Choose based on server RAM:
+
+| Available RAM | Mode | LIGHTWEIGHT_MODE | Playwright |
+|---|---|---|---|
+| **≥ 1.2GB** | Full (default) | `false` | Required: `playwright install chromium --with-deps` |
+| **512MB – 1.2GB** | Full + swap | `false` | Add 1–2GB swap file as safety net |
+| **≤ 512MB** | Lightweight | `true` | Not needed, skip install |
+
+### Full mode (`LIGHTWEIGHT_MODE=false`)
+- **Data sources**: Tavily + Jobindex + TheHub + 65 company career pages (Playwright)
+- **JD backfill**: httpx + Playwright fallback (LinkedIn/Indeed/Glassdoor)
+- **Memory**: ~500–700MB peak
+
+### Lightweight mode (`LIGHTWEIGHT_MODE=true`)
+- **Data sources**: Tavily + Jobindex + TheHub only (no career page scraping)
+- **JD backfill**: httpx only (JS-rendered pages may miss JD)
+- **Memory**: ~100–200MB peak
+- **No Playwright/Chromium required**
 
 ## Setup
 

@@ -102,16 +102,33 @@ crontab -e
 
 Minimum requirements: 1 CPU, 1GB RAM, 1GB disk.
 
-### Low-Memory Server (\u2264 512MB RAM)
+### Deployment Mode Guide
 
-Set `LIGHTWEIGHT_MODE=true` in `.env` to skip Playwright/Chromium:
+Choose based on your server's available RAM:
+
+| Available RAM | Mode | Setup | Features |
+|---|---|---|---|
+| **≥ 1.2GB** | Full (default) | `pip install -r requirements.txt && playwright install chromium --with-deps` | All 4 scrapers + Playwright JD backfill |
+| **512MB – 1.2GB** | Full (risky) | Same as above | May OOM during Playwright peaks; add swap as safety net |
+| **≤ 512MB** | Lightweight | `pip install -r requirements.txt` (no Playwright) | Tavily + Jobindex + TheHub only, httpx JD backfill |
+
+**Full mode** (`LIGHTWEIGHT_MODE=false`, default):
+- All 4 data sources: Tavily, Jobindex, TheHub, 65 company career pages
+- JD backfill with Playwright fallback (LinkedIn/Indeed/Glassdoor)
+- Memory: ~500–700MB peak
+- Requires: `playwright install chromium --with-deps`
+
+**Lightweight mode** (`LIGHTWEIGHT_MODE=true`):
+- 3 data sources: Tavily, Jobindex, TheHub (skips company career pages)
+- JD backfill httpx only (JS-rendered pages may miss JD content)
+- Memory: ~100–200MB peak
+- No Playwright/Chromium needed
 
 ```bash
 # In .env
-LIGHTWEIGHT_MODE=true
+LIGHTWEIGHT_MODE=true   # for servers with <= 512MB RAM
+LIGHTWEIGHT_MODE=false  # for servers with >= 1.2GB RAM (default)
 ```
-
-This disables company career page scraping and Playwright JD backfill, reducing memory to ~100-200MB. Tavily + Jobindex + TheHub still cover most job listings.
 
 ## Candidate Profile (`profile.yaml`)
 
