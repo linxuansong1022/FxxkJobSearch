@@ -152,6 +152,13 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # ============================================================
+# 轻量模式（低内存服务器: ≤ 512MB RAM）
+# ============================================================
+# 跳过 Playwright / Chromium，只用 Tavily + Jobindex + TheHub
+# JD backfill 仅用 httpx，不启动浏览器
+LIGHTWEIGHT_MODE = os.getenv("LIGHTWEIGHT_MODE", "false").lower() in ("true", "1", "yes")
+
+# ============================================================
 # 日志配置
 # ============================================================
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

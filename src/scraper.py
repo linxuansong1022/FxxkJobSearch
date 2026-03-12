@@ -176,11 +176,14 @@ def scrape_all_platforms(db: JobDatabase) -> int:
     except Exception as e:
         logger.warning(f"Jobindex 采集失败: {e}")
 
-    # 公司官网直抓 (基于公司列表)
-    try:
-        from src.scraper_careers import scrape_company_careers
-        total += scrape_company_careers(db)
-    except Exception as e:
-        logger.warning(f"公司官网采集失败: {e}")
+    # 公司官网直抓 (基于公司列表) — 需要 Playwright
+    if config.LIGHTWEIGHT_MODE:
+        logger.info("轻量模式: 跳过公司官网采集 (Playwright)")
+    else:
+        try:
+            from src.scraper_careers import scrape_company_careers
+            total += scrape_company_careers(db)
+        except Exception as e:
+            logger.warning(f"公司官网采集失败: {e}")
 
     return total

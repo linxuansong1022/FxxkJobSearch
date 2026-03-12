@@ -13,6 +13,7 @@ import logging
 import httpx
 from bs4 import BeautifulSoup
 
+import config
 from src.database import JobDatabase
 from src.utils import clean_html
 
@@ -158,6 +159,13 @@ async def _fetch_single_jd(
     client: httpx.AsyncClient, url: str, platform: str
 ) -> str | None:
     """抓取 JD 全文：httpx 优先，失败时 Playwright fallback"""
+    # 轻量模式: 只用 httpx，不启动 Playwright
+    if config.LIGHTWEIGHT_MODE:
+        jd = await _fetch_via_httpx(client, url, platform)
+        if not jd or len(jd) < MIN_JD_LENGTH:
+            logger.debug(f"  轻量模式: httpx 不足，跳过 Playwright: {url}")
+        return jd
+
     # JS 重度平台直接跳到 Playwright
     if platform in _JS_HEAVY_PLATFORMS:
         logger.debug(f"  {platform} 平台，直接使用 Playwright: {url}")

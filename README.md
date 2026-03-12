@@ -102,6 +102,17 @@ crontab -e
 
 Minimum requirements: 1 CPU, 1GB RAM, 1GB disk.
 
+### Low-Memory Server (\u2264 512MB RAM)
+
+Set `LIGHTWEIGHT_MODE=true` in `.env` to skip Playwright/Chromium:
+
+```bash
+# In .env
+LIGHTWEIGHT_MODE=true
+```
+
+This disables company career page scraping and Playwright JD backfill, reducing memory to ~100-200MB. Tavily + Jobindex + TheHub still cover most job listings.
+
 ## Candidate Profile (`profile.yaml`)
 
 The pipeline uses `profile.yaml` to personalize job scoring. You can either:
