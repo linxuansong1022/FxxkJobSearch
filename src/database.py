@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     url TEXT,
     content_hash TEXT UNIQUE,
     jd_text TEXT,
-    posted_at TEXT,              -- 职位发布时间 (ISO格式)
+    posted_at TEXT,              -- 职位发布时间 (ISO格式,源头可能为空)
+    first_seen_at TEXT DEFAULT (datetime('now')),  -- 入库时间,作为新鲜度兜底
     relevance TEXT,              -- relevant / irrelevant / unscored
     analysis TEXT,
     resume_path TEXT,
@@ -36,10 +37,12 @@ CREATE TABLE IF NOT EXISTS jobs (
 """
 
 # 迁移：给已有表加新字段
+# 注意 ALTER TABLE 不支持 non-constant 默认值,所以 first_seen_at 用 created_at 回填
 _MIGRATIONS = [
     "ALTER TABLE jobs ADD COLUMN posted_at TEXT",
     "ALTER TABLE jobs ADD COLUMN relevance TEXT DEFAULT 'unscored'",
     "ALTER TABLE jobs ADD COLUMN notified_at TEXT",
+    "ALTER TABLE jobs ADD COLUMN first_seen_at TEXT",
 ]
 
 
@@ -68,6 +71,16 @@ class JobDatabase:
             except sqlite3.OperationalError:
                 pass  # 字段已存在，跳过
 
+        # 回填 first_seen_at: 对老数据用 created_at 兜底
+        try:
+            self.conn.execute(
+                "UPDATE jobs SET first_seen_at = created_at "
+                "WHERE first_seen_at IS NULL AND created_at IS NOT NULL"
+            )
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
     def insert_job(self, job_data: dict) -> bool:
         """
         插入一条职位记录。如果 content_hash 已存在则跳过。
@@ -86,9 +99,9 @@ class JobDatabase:
             self.conn.execute(
                 """
                 INSERT INTO jobs (platform, platform_id, title, company, url,
-                                  content_hash, jd_text, posted_at)
+                                  content_hash, jd_text, posted_at, first_seen_at)
                 VALUES (:platform, :platform_id, :title, :company, :url,
-                        :content_hash, :jd_text, :posted_at)
+                        :content_hash, :jd_text, :posted_at, datetime('now'))
                 """,
                 job_data,
             )

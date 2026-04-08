@@ -40,19 +40,34 @@ EMBEDDING_MODEL = "text-embedding-004"
 EMBEDDING_DIMENSION = 768
 
 # ============================================================
-# Tavily Search API (替代 JobSpy)
+# Tavily Search API (补漏角色，主力换成 Apify)
 # ============================================================
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 TAVILY_SEARCH_CONFIG = {
-    "time_range": "week",          # "day" / "week" / "month" — week覆盖更广
+    "time_range": "day",           # 24h 内,只覆盖当天新增
     "max_results_per_query": 20,
     "include_domains": [
-        "linkedin.com/jobs",
-        "indeed.com",
+        # LinkedIn / Indeed 已由 Apify 覆盖,从 Tavily 移除避免重复消耗配额
         "glassdoor.com",
         "wellfound.com",
         "jobindex.dk",
     ],
+}
+
+# ============================================================
+# Apify (LinkedIn Jobs + Indeed 主力数据源)
+# ============================================================
+# 按结果计费 (~$5/1000 条),用 max_items_total 卡死预算上限
+APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN", "")
+APIFY_CONFIG = {
+    "linkedin_actor": "bebity/linkedin-jobs-scraper",
+    "indeed_actor": "misceres/indeed-scraper",
+    "max_items_per_query": 30,     # 每个关键词上限
+    "max_items_total": 200,        # 全局预算硬阀,超过即停止
+    "time_range": "past24Hours",   # past24Hours | pastWeek | pastMonth
+    "country": "DK",
+    "location": "Denmark",
+    "run_timeout_secs": 300,       # 单次 actor 运行超时
 }
 # ============================================================
 

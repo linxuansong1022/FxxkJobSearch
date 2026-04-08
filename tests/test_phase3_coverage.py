@@ -47,9 +47,10 @@ class TestSearchQueries:
 class TestTavilyConfig:
     """Test Tavily parameter adjustments."""
 
-    def test_time_range_is_week(self):
+    def test_time_range_is_day(self):
+        # Tavily 收紧到 24h(LinkedIn/Indeed 已由 Apify 主力覆盖)
         import config
-        assert config.TAVILY_SEARCH_CONFIG["time_range"] == "week"
+        assert config.TAVILY_SEARCH_CONFIG["time_range"] == "day"
 
     def test_max_results_increased(self):
         import config
