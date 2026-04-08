@@ -26,34 +26,35 @@ from src.database import JobDatabase
 logger = logging.getLogger(__name__)
 
 
-def _is_too_old(posted_at: str | None) -> bool:
-    """检查职位是否超过最大年龄"""
-    if not posted_at:
-        return False  # 没有发布时间的保留
+def _is_too_old(posted_at: str | None, first_seen_at: str | None = None) -> bool:
+    """检查职位是否超过最大年龄。
 
-    try:
-        # 兼容多种时间格式
-        for fmt in [
-            "%Y-%m-%dT%H:%M:%S.%fZ",
-            "%Y-%m-%dT%H:%M:%SZ",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d",
-        ]:
-            try:
-                # 处理带有时区的情况
-                posted = datetime.strptime(posted_at[:26], fmt)
-                if posted.tzinfo is None:
-                    posted = posted.replace(tzinfo=timezone.utc)
-                break
-            except ValueError:
-                continue
-        else:
-            return False  # 解析失败，保留
+    优先使用源头 posted_at;如果源头没给,fall back 到 first_seen_at(入库时间)。
+    两者都没有才放行(只在数据库迁移期间会出现)。
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=config.MAX_JOB_AGE_DAYS)
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=config.MAX_JOB_AGE_DAYS)
-        return posted < cutoff
-    except Exception:
-        return False
+    candidate = posted_at or first_seen_at
+    if not candidate:
+        return False  # 兜底放行
+
+    # 兼容多种时间格式
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S.%fZ",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",   # SQLite datetime('now') 格式
+        "%Y-%m-%d",
+    ]:
+        try:
+            parsed = datetime.strptime(candidate[:26], fmt)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed < cutoff
+        except ValueError:
+            continue
+
+    return False  # 全部格式都解析失败,保守放行
 
 
 def _is_obvious_irrelevant(title: str) -> bool:
@@ -162,8 +163,8 @@ async def process_job(db: JobDatabase, job: dict, client: genai.Client, semaphor
     """处理单个职位的过滤逻辑 (Async)"""
     title = job["title"]
     
-    # 1. 时间过滤 (Rule)
-    if _is_too_old(job.get("posted_at")):
+    # 1. 时间过滤 (Rule) - 优先用源头 posted_at,缺失时 fall back 到 first_seen_at
+    if _is_too_old(job.get("posted_at"), job.get("first_seen_at")):
         db.update_job_relevance(job["id"], "irrelevant", status="filtered")
         logger.debug(f"  [Time] 过期: {title}")
         return "too_old"

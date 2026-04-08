@@ -156,7 +156,21 @@ def scrape_all_platforms(db: JobDatabase) -> int:
     """运行所有采集器，返回总新增数"""
     total = 0
 
-    # Tavily (替代 JobSpy, 覆盖 LinkedIn/Indeed/Glassdoor)
+    # Apify LinkedIn (主力 LinkedIn 数据源)
+    try:
+        from src.scraper_apify_linkedin import scrape_apify_linkedin
+        total += scrape_apify_linkedin(db)
+    except Exception as e:
+        logger.warning(f"Apify LinkedIn 采集失败: {e}")
+
+    # Apify Indeed (主力 Indeed 数据源)
+    try:
+        from src.scraper_apify_indeed import scrape_apify_indeed
+        total += scrape_apify_indeed(db)
+    except Exception as e:
+        logger.warning(f"Apify Indeed 采集失败: {e}")
+
+    # Tavily (补漏角色: Glassdoor / Wellfound / Jobindex)
     try:
         from src.scraper_tavily import scrape_tavily
         total += scrape_tavily(db)

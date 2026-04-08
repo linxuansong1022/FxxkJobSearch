@@ -61,10 +61,15 @@ def send_daily_report(db: JobDatabase):
     增量通知：只推送 notified_at IS NULL 的已分析高匹配职位。
     """
     # 查询未通知的已分析职位
+    # 双重新鲜度兜底:
+    #   1. notified_at IS NULL — 没推过
+    #   2. first_seen_at >= -2 days — 即使源头 posted_at 不可信,也只推近 2 天首次入库的
     cursor = db.conn.execute(
         """SELECT id, title, company, url, analysis, created_at
            FROM jobs
-           WHERE status='analyzed' AND (notified_at IS NULL)
+           WHERE status='analyzed'
+             AND notified_at IS NULL
+             AND (first_seen_at IS NULL OR first_seen_at >= datetime('now', '-2 days'))
            ORDER BY id DESC LIMIT 50"""
     )
     jobs = []
